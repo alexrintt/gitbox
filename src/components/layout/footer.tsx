@@ -45,9 +45,8 @@ export function LayoutFooter() {
             <Link href="https://donate.alexrintt.io/">
               <Text mr={3}>Donate</Text>
             </Link>
-
-            <Link href="https://alexrintt.io/obsidian/web-crypto-api-aes-gcm-react-github-api-primer-design...-a-deep-dive-into-how-gitbox-works/">
-              <Text mr={3}>How GitBox was built</Text>
+            <Link href="https://github.com/alexrintt/gitbox">
+              <Text mr={3}>GitHub</Text>
             </Link>
           </Box>
           <Box
@@ -58,6 +57,9 @@ export function LayoutFooter() {
               flexWrap: "wrap",
             }}
           >
+            <Link href="https://alexrintt.io/obsidian/web-crypto-api-aes-gcm-react-github-api-primer-design...-a-deep-dive-into-how-gitbox-works/">
+              <Text mr={3}>How GitBox was built</Text>
+            </Link>
             <Link href="https://github.com/alexrintt">
               <Text mr={3}>Check my other projects</Text>
             </Link>

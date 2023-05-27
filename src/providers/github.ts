@@ -60,23 +60,6 @@ export const byteArrayToHex = (value: Uint8Array): string => {
     .join("");
 };
 
-// async function byteArrayToBase64(data: Uint8Array): Promise<string> {
-//   // Use a FileReader to generate a base64 data URI
-//   const base64url = await new Promise<string>((resolve, reject) => {
-//     const reader = new FileReader();
-//     reader.onload = () => resolve(reader.result as string);
-//     reader.onerror = () => reject();
-//     reader.readAsDataURL(new Blob([data]));
-//   });
-
-//   /*
-//   The result looks like
-//   "data:application/octet-stream;base64,<your base64 data>",
-//   so we split off the beginning:
-//   */
-//   return base64url.substring(base64url.indexOf(",") + 1);
-// }
-
 // buffer to base64
 function byteArrayToBase64Async(buffer: Uint8Array): Promise<string> {
   return new Promise((resolve, reject) => {

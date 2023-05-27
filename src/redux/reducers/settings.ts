@@ -1,7 +1,6 @@
 import type { Action } from "@reduxjs/toolkit";
 
 import { ApplicationState } from "..";
-// import { User as FirebaseUser } from "firebase/auth";
 import { GitRepository } from "../../providers";
 import { Err, Maybe, StateSelector, withScope } from "../utils";
 

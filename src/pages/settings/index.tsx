@@ -1,7 +1,6 @@
 import { useDispatch, useSelector } from "react-redux";
 import { Layout } from "../../components/layout";
 
-// import { firebaseAuth } from "../../firebase";
 import {
   Box,
   FormControl,

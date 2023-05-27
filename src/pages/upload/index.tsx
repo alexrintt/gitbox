@@ -48,6 +48,8 @@ export enum UploadTaskStatus {
 
   // File was uploaded and link is available
   uploaded = "UploadTaskStatus + uploaded",
+
+  deleteRequested = "UploadTaskStatus + deleteRequested",
 }
 
 export type UploadTask = {
@@ -139,7 +141,7 @@ export function UploadPage() {
     return e !== undefined && e !== null;
   }
 
-  const running = useRef<boolean>(false);
+  const [running, setRunning] = useState<boolean>(false);
 
   const pendingTasks = filterTasks(
     (task) => task.status !== UploadTaskStatus.uploaded
@@ -250,9 +252,23 @@ export function UploadPage() {
     }
   }, [clickedDownloadLink]);
 
+  async function handleFileDelete(task: UploadTask): Promise<void> {
+    setUploadTasks((uploadTasks) => {
+      const tasks: Record<string, UploadTask> = {
+        ...uploadTasks,
+        [task.file.id]: {
+          ...task,
+          status: UploadTaskStatus.deleteRequested,
+        },
+      };
+
+      return tasks;
+    });
+  }
+
   useEffect(() => {
     handleFilesUpload();
-  }, [pendingFiles]);
+  }, [uploadTasks]);
 
   async function handleFilesUpload() {
     if (!pendingFiles) return;
@@ -262,90 +278,153 @@ export function UploadPage() {
       return;
     }
 
-    if (running.current) {
+    if (running) {
       return;
     }
 
-    for (const pendingTask of Object.values(pendingTasks)!) {
-      if (pendingTask.retryCount > 5) {
+    const tasks = { ...pendingTasks };
+
+    for (const task of Object.values(tasks)!) {
+      if (task.retryCount > 5) {
         continue;
       }
 
-      const file = pendingTask.file;
+      switch (task.status) {
+        case UploadTaskStatus.uploaded:
+          break;
+        case UploadTaskStatus.loading:
+          if (!running) {
+            setUploadTasks((uploadTasks) => {
+              const tasks: Record<string, UploadTask> = {
+                ...uploadTasks,
+                [task.file.id]: {
+                  ...task,
+                  status: UploadTaskStatus.failed,
+                },
+              };
 
-      running.current = true;
-      try {
-        setUploadTasks((currentUploadTasks) => {
-          return {
-            ...currentUploadTasks,
-            [file.id]: {
-              ...currentUploadTasks[file.id],
-              status: UploadTaskStatus.loading,
-            },
-          };
-        });
+              return tasks;
+            });
+          }
+          break;
 
-        const binaryEntry = await db.binaryEntries.get({
-          id: file.id,
-        });
+        case UploadTaskStatus.deleteRequested:
+          setRunning(true);
 
-        if (binaryEntry === undefined) {
-          log.error(
-            `Expecting [binaryEntry] of ${file.name} but got undefined, is it a valid file?`
-          );
-          return;
-        }
+          const removeFromState = () =>
+            setUploadTasks((uploadTasks) => {
+              return Object.entries(uploadTasks)
+                .filter(([k]) => k !== task.file.id)
+                .reduce((acc, [k, v]) => ({ ...acc, [k]: v }), {});
+            });
 
-        const bytes = new Uint8Array(binaryEntry.arrayBuffer);
+          try {
+            setUploadTasks((uploadTasks) => {
+              const tasks: Record<string, UploadTask> = {
+                ...uploadTasks,
+                [task.file.id]: {
+                  ...task,
+                  status: UploadTaskStatus.loading,
+                },
+              };
 
-        try {
-          const downloadLink = await githubProvider.generateDownloadLink(
-            new File([bytes], binaryEntry.name),
-            settings.verified.repository,
-            settings.verified.accessToken
-          );
+              return tasks;
+            });
 
-          setUploadTasks((currentUploadTasks) => {
-            return {
-              ...currentUploadTasks,
-              [file.id]: {
-                ...currentUploadTasks[file.id],
-                status: UploadTaskStatus.uploaded,
-                downloadLink,
-              },
-            };
-          });
-        } catch (e: any) {
-          let error: string = "";
-
-          if (typeof e.code === "string") {
-            error += e.code + " ";
+            if (task.downloadLink && settings.verified.accessToken) {
+              await githubProvider.deleteFile(
+                task!.downloadLink!,
+                settings.verified.accessToken
+              );
+            }
+          } finally {
+            removeFromState();
+            setRunning(false);
           }
 
-          if (typeof e.message === "string") {
-            error += e.message;
-          }
-          if (error.length > 0) {
-            setErrorMessage(error);
-          } else {
-            setErrorMessage(
-              `Unknown error ocurred, please contact the download link provider`
-            );
+          break;
+
+        case UploadTaskStatus.failed:
+        case UploadTaskStatus.initial:
+          const file = task.file;
+
+          setRunning(true);
+
+          try {
+            setUploadTasks((currentUploadTasks) => {
+              return {
+                ...currentUploadTasks,
+                [file.id]: {
+                  ...currentUploadTasks[file.id],
+                  status: UploadTaskStatus.loading,
+                },
+              };
+            });
+
+            const binaryEntry = await db.binaryEntries.get({
+              id: file.id,
+            });
+
+            if (binaryEntry === undefined) {
+              log.error(
+                `Expecting [binaryEntry] of ${file.name} but got undefined, is it a valid file?`
+              );
+              return;
+            }
+
+            const bytes = new Uint8Array(binaryEntry.arrayBuffer);
+
+            try {
+              const downloadLink = await githubProvider.generateDownloadLink(
+                new File([bytes], binaryEntry.name),
+                settings.verified.repository,
+                settings.verified.accessToken
+              );
+
+              setUploadTasks((currentUploadTasks) => {
+                return {
+                  ...currentUploadTasks,
+                  [file.id]: {
+                    ...currentUploadTasks[file.id],
+                    status: UploadTaskStatus.uploaded,
+                    downloadLink,
+                  },
+                };
+              });
+            } catch (e: any) {
+              let error: string = "";
+
+              if (typeof e.code === "string") {
+                error += e.code + " ";
+              }
+
+              if (typeof e.message === "string") {
+                error += e.message;
+              }
+              if (error.length > 0) {
+                setErrorMessage(error);
+              } else {
+                setErrorMessage(
+                  `Unknown error ocurred, please contact the download link provider`
+                );
+              }
+
+              setUploadTasks((currentUploadTasks) => {
+                return {
+                  ...currentUploadTasks,
+                  [file.id]: {
+                    ...currentUploadTasks[file.id],
+                    status: UploadTaskStatus.failed,
+                    retryCount: task.retryCount + 1,
+                  },
+                };
+              });
+            }
+          } finally {
+            setRunning(false);
           }
 
-          setUploadTasks((currentUploadTasks) => {
-            return {
-              ...currentUploadTasks,
-              [file.id]: {
-                ...currentUploadTasks[file.id],
-                status: UploadTaskStatus.failed,
-                retryCount: pendingTask.retryCount + 1,
-              },
-            };
-          });
-        }
-      } finally {
-        running.current = false;
+          break;
       }
     }
   }
@@ -420,10 +499,11 @@ export function UploadPage() {
           )}
           {sharedUploadTasks.length > 0 &&
             [...sharedUploadTasks]
-              .sort((a, z) => a.file.modifiedAt - z.file.modifiedAt)
+              .sort((a, z) => a.file?.modifiedAt ?? 0 - z.file?.modifiedAt ?? 0)
               .map((uploadTask) => {
                 return (
                   <span
+                    key={uploadTask.file.id}
                     onMouseOver={() => setHoveredFileId(uploadTask.file.id)}
                     onMouseOut={() => setHoveredFileId(undefined)}
                   >
@@ -458,6 +538,7 @@ export function UploadPage() {
 
                           switch (uploadTask.status) {
                             case UploadTaskStatus.failed:
+                            case UploadTaskStatus.deleteRequested:
                               color = "danger.fg";
                               break;
                             case UploadTaskStatus.initial:
@@ -503,52 +584,10 @@ export function UploadPage() {
                             <IconButton
                               style={{ margin: "0.2rem 0" }}
                               aria-labelledby="Remove file"
-                              onClick={async (e) => {
+                              onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-
-                                const removeFromState = () =>
-                                  setUploadTasks((uploadTasks) => {
-                                    const tasks = { ...uploadTasks };
-
-                                    delete tasks[uploadTask.file.id];
-
-                                    return tasks;
-                                  });
-
-                                if (
-                                  uploadTask.status === UploadTaskStatus.failed
-                                ) {
-                                  removeFromState();
-                                  return;
-                                }
-
-                                if (
-                                  uploadTask?.downloadLink &&
-                                  settings.verified.valid
-                                ) {
-                                  try {
-                                    setUploadTasks((uploadTasks) => {
-                                      const tasks: Record<string, UploadTask> =
-                                        {
-                                          ...uploadTasks,
-                                          [uploadTask.file.id]: {
-                                            ...uploadTask,
-                                            status: UploadTaskStatus.loading,
-                                          },
-                                        };
-
-                                      return tasks;
-                                    });
-
-                                    await githubProvider.deleteFile(
-                                      uploadTask!.downloadLink!,
-                                      settings.verified.accessToken
-                                    );
-                                  } finally {
-                                    removeFromState();
-                                  }
-                                }
+                                handleFileDelete(uploadTask);
                               }}
                               icon={() => (
                                 <StyledOcticon

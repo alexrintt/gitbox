@@ -401,8 +401,7 @@ export class GitHubProvider extends GitLikeProvider {
       (e: any) => e.path === encryptedFilename
     );
 
-    //api.github.com/repos/alexrintt/drive/contents/.gitbox/65b3bad60034bd82821858b2a80c014b6a2d3662619909bf1e4d6382e25c35ab
-    https: await fetch(
+    await fetch(
       `https://api.github.com/repos/${safeRepoInfo!.owner}/${
         safeRepoInfo!.name
       }/contents/${filePathAsString}`,

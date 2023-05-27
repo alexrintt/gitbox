@@ -25,13 +25,15 @@ export const preloadedState: ApplicationState = {
   settings: settingsPreloadedState,
 };
 
+export const isDev = import.meta.env.MODE === "development";
+
 export const store = configureStore({
   reducer: rootReducer,
   middleware: (getDefaultMiddleware) => [
     ...getDefaultMiddleware(),
     sagaMiddleware,
   ],
-  devTools: true,
+  devTools: isDev,
   preloadedState: preloadedState,
 });
 
